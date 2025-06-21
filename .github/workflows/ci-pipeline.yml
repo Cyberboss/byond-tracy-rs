@@ -43,5 +43,11 @@ jobs:
     name: Check Style Guides
     runs-on: "ubuntu-latest"
     steps:
-      - name: EditorConfig-Action
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Code Formatting Check
+        run: cargo fmt --check
+
+      - name: EditorConfig Check
         uses: zbeekman/EditorConfig-Action@v1.1.1
