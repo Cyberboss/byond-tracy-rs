@@ -49,5 +49,8 @@ jobs:
       - name: Code Formatting Check
         run: cargo fmt --check
 
-      - name: EditorConfig Check
+      - name: Download EditorConfig Checker
         uses: editorconfig-checker/action-editorconfig-checker@v2
+
+      - name: Run EditorConfig Checker
+        run: editorconfig-checker
