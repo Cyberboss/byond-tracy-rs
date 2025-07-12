@@ -1,10 +1,24 @@
-use std::{default, mem::transmute};
+use std::mem::transmute;
 
-use crate::{INSTANCE, byond::offsets::Offsets};
+use crate::byond::offsets::Offsets;
 
-pub mod offsets;
+pub(crate) mod offsets;
 
-pub type BuildNumber = i32;
+pub(crate) type BuildNumber = i32;
+
+#[cfg(target_os = "windows")]
+pub(crate) type ExecProcFunction = unsafe extern "cdecl" fn(*const Proc) -> DreamObject;
+
+#[cfg(not(target_os = "windows"))]
+pub(crate) type ExecProcFunction = unsafe extern "regparm3" fn(*const Proc) -> DreamObject;
+
+#[cfg(target_os = "windows")]
+pub(crate) type ServerTickFunction = unsafe extern "stdcall" fn() -> i32;
+
+#[cfg(not(target_os = "windows"))]
+pub(crate) type ServerTickFunction = unsafe extern "cdecl" fn() -> i32;
+
+pub(crate) type SendMapsFunction = unsafe extern "cdecl" fn();
 
 #[repr(C)]
 union ObjectPart1 {
@@ -111,20 +125,6 @@ struct Trampoline {
     send_maps: [u8; 32],
 }
 
-#[cfg(target_os = "windows")]
-type ExecProcFunction = unsafe extern "cdecl" fn(*const Proc) -> DreamObject;
-
-#[cfg(not(target_os = "windows"))]
-type ExecProcFunction = unsafe extern "regparm3" fn(*const Proc) -> DreamObject;
-
-#[cfg(target_os = "windows")]
-type ServerTickFunction = unsafe extern "stdcall" fn() -> i32;
-
-#[cfg(not(target_os = "windows"))]
-type ServerTickFunction = unsafe extern "cdecl" fn() -> i32;
-
-type SendMapsFunction = unsafe extern "cdecl" fn();
-
 struct ProcdefPointer(usize);
 
 pub(crate) struct ByondReflectionData {
@@ -149,6 +149,9 @@ impl ByondReflectionData {
     pub fn create_and_initialize_hooks(
         offsets: &Offsets,
         byondcore_base_address: usize,
+        exec_proc_hook: ExecProcFunction,
+        server_tick_hook: ServerTickFunction,
+        send_maps_hook: SendMapsFunction,
     ) -> Result<Self, String> {
         // SAFETY: Provided offsets should have been verified to be the offsets of the BYOND internals we're looking for
         unsafe {
@@ -281,38 +284,5 @@ fn unprotect_address(address: usize, size: usize) -> Result<ProtectionFlags, Str
 }
 
 fn reprotect_address(address: usize, size: usize, flags: ProtectionFlags) -> Result<(), String> {
-    todo!()
-}
-
-// TODO: FIX LINUX REGPARM(3)
-unsafe extern "C" fn exec_proc_hook(proc: *const Proc) -> DreamObject {
-    let orig_exec_proc = INSTANCE
-        .get()
-        .expect("(exec_proc_hook) Hook installed but OnceLock empty!")
-        .byond
-        .orig_exec_proc;
-    if (unsafe { &*proc }).definition < 0x14000 {
-        todo!()
-    }
-
-    unsafe { orig_exec_proc(proc) }
-}
-
-#[cfg(target_os = "windows")]
-extern "stdcall" fn server_tick_hook() -> i32 {
-    server_tick_hook_core()
-}
-
-#[cfg(not(target_os = "windows"))]
-extern "C" fn server_tick_hook() -> i32 {
-    server_tick_hook_core()
-}
-
-#[inline(always)]
-fn server_tick_hook_core() -> i32 {
-    todo!()
-}
-
-extern "C" fn send_maps_hook() {
     todo!()
 }

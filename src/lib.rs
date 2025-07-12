@@ -26,7 +26,7 @@ thread_local! {
     static RETURN_STRING: RefCell<CString> = RefCell::new(CString::default());
 }
 
-pub(crate) static INSTANCE: OnceLock<Instance> = OnceLock::new();
+static INSTANCE: OnceLock<Instance> = OnceLock::new();
 
 /// SAFETY: This function must only be called via the call()() or call_ext()() procs using the legacy API of a game running using Build Your Own Net Dream (BYOND, https://www.byond.com/).
 /// It relies on reverse engineered internals of the game runtime
@@ -92,6 +92,9 @@ fn setup() -> Result<Instance, *const c_char> {
         byond: match ByondReflectionData::create_and_initialize_hooks(
             offsets,
             byondcore_base_address,
+            exec_proc_hook,
+            server_tick_hook,
+            send_maps_hook,
         ) {
             Ok(data) => data,
             Err(error) => return Err(error.as_ptr() as *const c_char),
@@ -161,4 +164,37 @@ fn get_byondcore_handle() -> Result<Library, String> {
             byond_so_name, error,
         )),
     }
+}
+
+// TODO: FIX LINUX REGPARM(3)
+unsafe extern "C" fn exec_proc_hook(proc: *const Proc) -> DreamObject {
+    let orig_exec_proc = INSTANCE
+        .get()
+        .expect("(exec_proc_hook) Hook installed but OnceLock empty!")
+        .byond
+        .orig_exec_proc;
+    if (unsafe { &*proc }).definition < 0x14000 {
+        todo!()
+    }
+
+    unsafe { orig_exec_proc(proc) }
+}
+
+#[cfg(target_os = "windows")]
+unsafe extern "stdcall" fn server_tick_hook() -> i32 {
+    server_tick_hook_core()
+}
+
+#[cfg(not(target_os = "windows"))]
+unsafe extern "C" fn server_tick_hook() -> i32 {
+    server_tick_hook_core()
+}
+
+#[inline(always)]
+fn server_tick_hook_core() -> i32 {
+    todo!()
+}
+
+unsafe extern "C" fn send_maps_hook() {
+    todo!()
 }
