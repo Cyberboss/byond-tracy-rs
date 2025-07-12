@@ -139,6 +139,10 @@ fn get_byondcore_handle() -> Result<Library, String> {
 fn get_byondcore_handle() -> Result<Library, String> {
     let byond_so_name = "libbyond.so";
 
+    // From consts.rs in libloading:
+    // Other constants that exist but are not bound because they are platform-specific (non-posix)
+    // extensions. Some of these constants are only relevant to `dlsym` or `dlmopen` calls.
+    const RTLD_NOLOAD: c_int = 0x00004;
     let handle_acquisition_result =
         unsafe { Library::open(Some(byond_dll_name), (RTLD_NOW | RTLD_NOLOAD)) };
 
