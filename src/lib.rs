@@ -17,7 +17,7 @@ use tracy_client::Client;
 compile_error!("Compiling for non-32bit is not allowed.");
 
 struct Instance {
-    byond: ByondReflectionData,
+    pub byond: ByondReflectionData,
     _tracy_client: Client,
 }
 
@@ -26,7 +26,7 @@ thread_local! {
     static RETURN_STRING: RefCell<CString> = RefCell::new(CString::default());
 }
 
-static INSTANCE: OnceLock<Instance> = OnceLock::new();
+pub(crate) static INSTANCE: OnceLock<Instance> = OnceLock::new();
 
 /// SAFETY: This function must only be called via the call()() or call_ext()() procs using the legacy API of a game running using Build Your Own Net Dream (BYOND, https://www.byond.com/).
 /// It relies on reverse engineered internals of the game runtime

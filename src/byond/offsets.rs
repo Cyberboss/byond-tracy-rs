@@ -827,7 +827,7 @@ static OFFSETS_LINUX: [Offsets; 101] = [
     ),
 ];
 
-pub struct Offsets {
+pub(crate) struct Offsets {
     pub byond_build: BuildNumber,
     pub strings: usize,
     pub strings_len: usize,

@@ -1,6 +1,6 @@
 use std::{default, mem::transmute};
 
-use crate::byond::offsets::Offsets;
+use crate::{INSTANCE, byond::offsets::Offsets};
 
 pub mod offsets;
 
@@ -81,7 +81,7 @@ struct ExecutionContext;
 
 #[repr(C)]
 struct Proc {
-    definition: u32,
+    definition: usize,
     flags: u8,
     supers: u8,
     unused: u16,
@@ -127,7 +127,7 @@ type SendMapsFunction = unsafe extern "cdecl" fn();
 
 struct ProcdefPointer(usize);
 
-pub struct ByondReflectionData {
+pub(crate) struct ByondReflectionData {
     strings_base_address: *const DreamString,
     strings_len: *const usize,
     miscs_base_address: *const Misc,
@@ -284,14 +284,35 @@ fn reprotect_address(address: usize, size: usize, flags: ProtectionFlags) -> Res
     todo!()
 }
 
-fn exec_proc_hook(proc: *const Proc) -> DreamObject {
-    todo!()
+// TODO: FIX LINUX REGPARM(3)
+unsafe extern "C" fn exec_proc_hook(proc: *const Proc) -> DreamObject {
+    let orig_exec_proc = INSTANCE
+        .get()
+        .expect("(exec_proc_hook) Hook installed but OnceLock empty!")
+        .byond
+        .orig_exec_proc;
+    if (*proc).definition < 0x14000 {
+        todo!()
+    }
+
+    unsafe { orig_exec_proc(proc) }
 }
 
+#[cfg(target_os = "windows")]
 extern "stdcall" fn server_tick_hook() -> i32 {
+    server_tick_hook_core()
+}
+
+#[cfg(not(target_os = "windows"))]
+extern "C" fn server_tick_hook() -> i32 {
+    server_tick_hook_core()
+}
+
+#[inline(always)]
+fn server_tick_hook_core() -> i32 {
     todo!()
 }
 
-fn send_maps_hook() {
+extern "C" fn send_maps_hook() {
     todo!()
 }
