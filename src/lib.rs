@@ -8,19 +8,11 @@ use std::{
     sync::OnceLock,
 };
 
-use tracy_client::Client;
-
-#[cfg(target_os = "windows")]
-use windows::Win32::Foundation::HMODULE;
-use windows::{
-    Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress},
-    core::PCSTR,
-};
-
 use crate::byond::{
     BuildNumber,
     offsets::{OFFSETS, Offsets},
 };
+use tracy_client::Client;
 
 #[cfg(not(target_pointer_width = "32"))]
 compile_error!("Compiling for non-32bit is not allowed.");
@@ -125,7 +117,14 @@ fn setup() -> Result<Instance, *const c_char> {
 }
 
 #[cfg(target_os = "windows")]
-fn get_byond_build_and_byondcore_handle() -> Result<(BuildNumber, HMODULE), String> {
+fn get_byond_build_and_byondcore_handle() -> Result<(BuildNumber, usize), String> {
+    #[cfg(target_os = "windows")]
+    use windows::Win32::Foundation::HMODULE;
+    use windows::{
+        Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress},
+        core::PCSTR,
+    };
+
     let byond_dll_name = "byondcore.dll";
     let byond_dll_cstr = CString::new(byond_dll_name).expect("Why isn't this parsing?");
     let byond_dll_name_pcstr = PCSTR(byond_dll_cstr.as_bytes().as_ptr());
@@ -169,7 +168,7 @@ fn get_byond_build_and_byondcore_handle() -> Result<(BuildNumber, HMODULE), Stri
     unsafe {
         let get_byond_build: unsafe fn() -> i32 =
             std::mem::transmute(get_byond_build_farproc_pointer);
-        Ok((get_byond_build(), byondcore_handle))
+        Ok((get_byond_build(), byondcore_handle.0 as usize))
     }
 }
 
