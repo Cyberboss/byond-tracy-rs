@@ -33,7 +33,7 @@ static SEND_MAPS_SOURCE_LOCATION: OnceLock<SpanLocation> = OnceLock::new();
 struct Instance {
     pub byond: ByondReflectionData,
     tracy_client: Client,
-    source_locations: [Option<SpanLocation>; MAX_PROCS],
+    source_locations: [SpanLocation; MAX_PROCS],
 }
 
 impl Instance {
@@ -116,10 +116,8 @@ fn setup() -> Result<Instance, *const c_char> {
     let instance = Instance {
         byond,
         tracy_client: Client::start(),
-        source_locations: [const { None }; MAX_PROCS],
+        source_locations: byond.build_source_locations(),
     };
-
-    byond.build_source_locations(&mut instance.source_locations);
 
     Ok(instance)
 }
@@ -204,8 +202,9 @@ fn exec_proc_hook_core(proc: *const Proc) -> DreamObject {
         .expect("(exec_proc_hook) Hook installed but OnceLock empty!");
     let orig_exec_proc = instance_ref.byond.orig_exec_proc;
     let proc_ref: &Proc = unsafe { &*proc };
-    if proc_ref.procdef < MAX_PROCS {
-        let srcloc = todo!("get source loc");
+    if proc_ref.procdef < instance_ref.source_locations.len()
+        && let Some(srcloc) = &instance_ref.source_locations[proc_ref.procdef]
+    {
         let zone = instance_ref.tracy_client().span(srcloc, 0);
 
         // procs with pre-existing contexts are resuming from sleep

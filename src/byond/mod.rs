@@ -1,6 +1,8 @@
 use std::{
+    array::from_fn,
     ffi::{CStr, c_char},
     mem::transmute,
+    ptr::null,
 };
 
 use crate::byond::offsets::Offsets;
@@ -213,9 +215,12 @@ impl ByondReflectionData {
         }
     }
 
-    pub fn build_source_locations(&self, source_locations: &mut [Option<SpanLocation>; MAX_PROCS]) {
-        for i in 0..MAX_PROCS {
+    pub fn build_source_locations(&self) -> [SpanLocation; MAX_PROCS] {
+        from_fn(|i| {
+            let mut name: *const u8 = null();
             let mut function = "<?>";
+            let mut file = "<?.dm>".as_ptr();
+            let mut line = 0xFFFFFFFF;
 
             if let Some(procdef) = self.get_procdef(i) {
                 let str = self.get_string_from_id(procdef.path_string_id());
@@ -229,11 +234,11 @@ impl ByondReflectionData {
 
                     todo!()
                 }
-
-                // TODO: Colour
-                source_locations[i] = Some(make_span_location(function, name, file, line));
             }
-        }
+
+            // TODO: Colour
+            make_span_location(function, name, file, line)
+        })
     }
 
     fn get_procdef(&self, index: usize) -> Option<ProcdefPointer> {
