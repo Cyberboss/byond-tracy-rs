@@ -18,7 +18,7 @@ compile_error!("Compiling for non-32bit is not allowed.");
 
 struct Instance {
     byond: ByondReflectionData,
-    tracy_client: Client,
+    _tracy_client: Client,
 }
 
 static EMPTY_STRING: c_char = 0;
@@ -89,8 +89,14 @@ fn setup() -> Result<Instance, *const c_char> {
     };
 
     Ok(Instance {
-        byond: ByondReflectionData::create_and_initialize_hooks(offsets, byondcore_base_address),
-        tracy_client: Client::start(),
+        byond: match ByondReflectionData::create_and_initialize_hooks(
+            offsets,
+            byondcore_base_address,
+        ) {
+            Ok(data) => data,
+            Err(error) => return Err(error.as_ptr() as *const c_char),
+        },
+        _tracy_client: Client::start(),
     })
 }
 
@@ -142,6 +148,8 @@ fn get_byondcore_handle() -> Result<Library, String> {
     // From consts.rs in libloading:
     // Other constants that exist but are not bound because they are platform-specific (non-posix)
     // extensions. Some of these constants are only relevant to `dlsym` or `dlmopen` calls.
+    //
+    // This is the value for Linux
     const RTLD_NOLOAD: c_int = 0x00004;
     let handle_acquisition_result =
         unsafe { Library::open(Some(byond_so_name), RTLD_NOW | RTLD_NOLOAD) };

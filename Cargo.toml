@@ -17,4 +17,4 @@ lto = true
 
 [dependencies]
 libloading = "0.8.8"
-tracy-client = "0.18.2"
+tracy-client = { version = "0.18.2", features = ["enable", "manual-lifetime"] }
