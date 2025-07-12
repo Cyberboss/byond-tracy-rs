@@ -2,6 +2,7 @@ use crate::byond::BuildNumber;
 
 pub static OFFSETS: &'static [Offsets] = platform_offsets();
 
+#[allow(unused)]
 static OFFSETS_WINDOWS: [Offsets; 103] = [
     Offsets::new(
         1543, 0x0035FC58, 0x0035FC5C, 0x0035FC68, 0x0035FC6C, 0x0035FC78, 0x0035FC7C, 0x00180024,
@@ -417,6 +418,7 @@ static OFFSETS_WINDOWS: [Offsets; 103] = [
     ),
 ];
 
+#[allow(unused)]
 static OFFSETS_LINUX: [Offsets; 101] = [
     /*                                strings     strings_len miscs       miscs_len   procdefs   procdefs_len procdef     exec_proc   server_tick send_maps   prologue */
     Offsets::new(

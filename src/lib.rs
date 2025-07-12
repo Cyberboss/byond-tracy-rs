@@ -1,15 +1,15 @@
 #![feature(once_cell_try)]
 mod byond;
 
+use crate::byond::{BuildNumber, ByondReflectionData, offsets::OFFSETS};
+#[cfg(not(target_os = "windows"))]
+use libloading::os::unix::Library;
+#[cfg(target_os = "windows")]
+use libloading::os::windows::Library;
 use std::{
     cell::RefCell,
     ffi::{CString, c_char, c_int},
     sync::OnceLock,
-};
-
-use crate::byond::{
-    BuildNumber,
-    offsets::{OFFSETS, Offsets},
 };
 use tracy_client::Client;
 
@@ -17,7 +17,7 @@ use tracy_client::Client;
 compile_error!("Compiling for non-32bit is not allowed.");
 
 struct Instance {
-    offsets: &'static Offsets,
+    byond: ByondReflectionData,
     tracy_client: Client,
 }
 
@@ -52,7 +52,7 @@ fn init_core() -> *const c_char {
 }
 
 fn setup() -> Result<Instance, *const c_char> {
-    let (byond_build, byondcore_handle) = match get_byond_build_and_byondcore_handle() {
+    let (byond_build, byondcore_base_address) = match get_byond_build_and_byondcore_handle() {
         Ok(byond_build) => byond_build,
         Err(error) => {
             return Err(if error.is_empty() {
@@ -89,66 +89,64 @@ fn setup() -> Result<Instance, *const c_char> {
     };
 
     Ok(Instance {
-        offsets,
+        byond: ByondReflectionData::create_and_initialize_hooks(offsets, byondcore_base_address),
         tracy_client: Client::start(),
     })
 }
 
-#[cfg(target_os = "windows")]
 fn get_byond_build_and_byondcore_handle() -> Result<(BuildNumber, usize), String> {
-    #[cfg(target_os = "windows")]
-    use windows::{
-        Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress},
-        core::PCSTR,
-    };
-
-    let byond_dll_name = "byondcore.dll";
-    let byond_dll_cstr = CString::new(byond_dll_name).expect("Why isn't this parsing?");
-    let byond_dll_name_pcstr = PCSTR(byond_dll_cstr.as_bytes().as_ptr());
-
-    // SAFETY: https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getmodulehandlea
-    // We rely on BYOND to not unload the .dll
-    let library_load_result = unsafe { GetModuleHandleA(byond_dll_name_pcstr) };
-
-    let byondcore_handle = match library_load_result {
-        Ok(handle) => handle,
-        Err(error) => {
-            return Err(format!(
-                "Unable to find {} handle: {}",
-                byond_dll_name,
-                error.message(),
-            ));
-        }
-    };
+    let byondcore_handle = get_byondcore_handle()?;
 
     let get_byond_build_name = "?GetByondBuild@ByondLib@@QAEJXZ";
-    let get_byond_build_cstr = CString::new(get_byond_build_name).expect("Why isn't this parsing?");
-    let get_byond_build_pcstr = PCSTR(get_byond_build_cstr.as_bytes().as_ptr());
-
-    // SAFETY: https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getprocaddress
-    let get_byond_build_pointer_result =
-        unsafe { GetProcAddress(byondcore_handle, get_byond_build_pcstr) };
-
-    let get_byond_build_farproc_pointer = match get_byond_build_pointer_result {
-        Some(pointer) => pointer,
-        None => {
-            return Err(format!(
-                "Unable to find symbol {} in byondcore.dll!",
-                get_byond_build_name
-            ));
-        }
-    };
-
     // SAFETY: The symbol specified using get_byond_build_name demangles to the following C++ declaration:
     // public: long __thiscall ByondLib::GetByondBuild(void)
     // Reverse engineering shows the "this" pointer is not used in this function
-    unsafe {
-        let get_byond_build: unsafe fn() -> i32 =
-            std::mem::transmute(get_byond_build_farproc_pointer);
-        Ok((get_byond_build(), byondcore_handle.0 as usize))
+    let get_byond_build_pointer_result =
+        unsafe { byondcore_handle.get(get_byond_build_name.as_bytes()) };
+
+    let get_byond_build: unsafe fn() -> i32 = match get_byond_build_pointer_result {
+        Ok(pointer) => *pointer,
+        Err(error) => {
+            return Err(format!(
+                "Unable to find symbol {} in byondcore.dll: {}",
+                get_byond_build_name, error
+            ));
+        }
+    };
+
+    // SAFETY: GetByondBuild() is essentially a static const function
+    let build_number = unsafe { get_byond_build() };
+
+    Ok((build_number, byondcore_handle.into_raw() as usize))
+}
+
+#[cfg(target_os = "windows")]
+fn get_byondcore_handle() -> Result<Library, String> {
+    let byond_dll_name = "byondcore.dll";
+
+    let handle_acquisition_result = Library::open_already_loaded(byond_dll_name);
+
+    match handle_acquisition_result {
+        Ok(handle) => Ok(handle.into()),
+        Err(error) => Err(format!(
+            "Unable to find {} handle: {}",
+            byond_dll_name, error,
+        )),
     }
 }
 
-fn get_byond_build2() -> Result<BuildNumber, String> {
-    todo!()
+#[cfg(not(target_os = "windows"))]
+fn get_byondcore_handle() -> Result<Library, String> {
+    let byond_so_name = "libbyond.so";
+
+    let handle_acquisition_result =
+        unsafe { Library::open(Some(byond_dll_name), (RTLD_NOW | RTLD_NOLOAD)) };
+
+    match handle_acquisition_result {
+        Ok(handle) => Ok(handle.into()),
+        Err(error) => Err(format!(
+            "Unable to find {} address: {}",
+            byond_so_name, error,
+        )),
+    }
 }

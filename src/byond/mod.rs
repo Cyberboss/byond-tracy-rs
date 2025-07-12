@@ -126,7 +126,7 @@ type SendMapsFunction = unsafe extern "cdecl" fn();
 
 struct ProcdefPointer(usize);
 
-struct ByondReflectionData {
+pub struct ByondReflectionData {
     strings_base_address: *const String,
     strings_len: *const usize,
     miscs_base_address: *const Misc,
@@ -144,7 +144,7 @@ struct ByondReflectionData {
 }
 
 impl ByondReflectionData {
-    fn create_and_initialize_hooks(offsets: &Offsets, byondcore_base_address: usize) -> Self {
+    pub fn create_and_initialize_hooks(offsets: &Offsets, byondcore_base_address: usize) -> Self {
         let prologues = [
             offsets.prologue >> 0,
             offsets.prologue >> 8,
@@ -184,3 +184,9 @@ impl ByondReflectionData {
         todo!()
     }
 }
+
+// SAFETY: Pointers are read only and accessed in a manner with correct ownership from the BYOND runtime
+unsafe impl Send for ByondReflectionData {}
+
+// SAFETY: Pointers are read only and accessed in a manner with correct ownership from the BYOND runtime
+unsafe impl Sync for ByondReflectionData {}
