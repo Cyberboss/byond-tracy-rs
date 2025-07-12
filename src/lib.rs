@@ -144,7 +144,7 @@ fn get_byondcore_handle() -> Result<Library, String> {
     // extensions. Some of these constants are only relevant to `dlsym` or `dlmopen` calls.
     const RTLD_NOLOAD: c_int = 0x00004;
     let handle_acquisition_result =
-        unsafe { Library::open(Some(byond_dll_name), RTLD_NOW | RTLD_NOLOAD) };
+        unsafe { Library::open(Some(byond_so_name), RTLD_NOW | RTLD_NOLOAD) };
 
     match handle_acquisition_result {
         Ok(handle) => Ok(handle.into()),
