@@ -1,8 +1,15 @@
-use std::mem::transmute;
+use std::{
+    ffi::{CStr, c_char},
+    mem::transmute,
+};
 
 use crate::byond::offsets::Offsets;
 
+use tracy_client::{SpanLocation, internal::make_span_location};
+
 pub(crate) mod offsets;
+
+pub(crate) const MAX_PROCS: usize = 0x14000;
 
 pub(crate) type BuildNumber = i32;
 
@@ -19,6 +26,8 @@ pub(crate) type ServerTickFunction = unsafe extern "stdcall" fn() -> i32;
 pub(crate) type ServerTickFunction = unsafe extern "cdecl" fn() -> i32;
 
 pub(crate) type SendMapsFunction = unsafe extern "cdecl" fn();
+
+type DreamStringId = u32;
 
 #[repr(C)]
 union ObjectPart1 {
@@ -40,8 +49,8 @@ pub(crate) struct DreamObject {
 
 #[repr(C)]
 struct DreamString {
-    data: *const u8,
-    id: u32,
+    data: *const c_char,
+    id: DreamStringId,
     left: *const DreamString,
     right: *const DreamString,
     refcount: u32,
@@ -51,7 +60,7 @@ struct DreamString {
 
 #[repr(C)]
 struct ProcDefinition {
-    path: u32,
+    path: DreamStringId,
     name: u32,
     desc: u32,
     category: u32,
@@ -145,6 +154,8 @@ pub(crate) struct ByondReflectionData {
     trampoline: Trampoline,
 }
 
+pub struct SourceLocations {}
+
 impl ByondReflectionData {
     pub fn create_and_initialize_hooks(
         offsets: &Offsets,
@@ -202,13 +213,40 @@ impl ByondReflectionData {
         }
     }
 
-    pub fn strings(&self) -> &[DreamString] {
-        unsafe { std::slice::from_raw_parts(self.strings_base_address, *self.strings_len) }
+    pub fn build_source_locations(&self, source_locations: &mut [Option<SpanLocation>; MAX_PROCS]) {
+        for i in 0..MAX_PROCS {
+            let mut function = "<?>";
+
+            if let Some(procdef) = self.get_procdef(i) {
+                let str = self.get_string_from_id(procdef.path_string_id());
+
+                if !str.is_null() {
+                    let str_ref = unsafe { *str };
+                    if !str_ref.data.is_null() {
+                        let c_str = unsafe { CStr::from_ptr(str_ref.data) };
+                        function = c_str.to_str().expect("Failed to get proc name!");
+                    }
+
+                    todo!()
+                }
+
+                // TODO: Colour
+                source_locations[i] = Some(make_span_location(function, name, file, line));
+            }
+        }
     }
 
     fn get_procdef(&self, index: usize) -> Option<ProcdefPointer> {
         todo!()
     }
+
+    fn get_string_from_id(&self, string_id: u32) -> *const DreamString {
+        todo!()
+    }
+}
+
+impl ProcdefPointer {
+    fn path_string_id(&self) -> DreamStringId {}
 }
 
 // SAFETY: Pointers are read only and accessed in a manner with correct ownership from the BYOND runtime
@@ -219,7 +257,7 @@ unsafe impl Sync for ByondReflectionData {}
 
 // SAFETY:
 // - hook_fn and original_fn must be two different function pointers with identical calling conventions, parameters, and return types
-// - size must be the size of original_fn's prologue (whatever that means)
+// - size must be the number of bytes to overwrite in the function's prologue to safely hook it
 // - trampoline's memory location must be pinned
 unsafe fn hook<T>(
     hook_fn: *const T,

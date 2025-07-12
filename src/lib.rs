@@ -1,7 +1,9 @@
 #![feature(once_cell_try)]
 mod byond;
 
-use crate::byond::{BuildNumber, ByondReflectionData, DreamObject, Proc, offsets::OFFSETS};
+use crate::byond::{
+    BuildNumber, ByondReflectionData, DreamObject, MAX_PROCS, Proc, offsets::OFFSETS,
+};
 #[cfg(not(target_os = "windows"))]
 use libloading::os::unix::{Library, RTLD_NOW};
 #[cfg(target_os = "windows")]
@@ -12,7 +14,7 @@ use std::{
     ptr::null,
     sync::OnceLock,
 };
-use tracy_client::{Client, SpanLocation};
+use tracy_client::{Client, SpanLocation, internal::make_span_location};
 
 #[cfg(not(target_pointer_width = "32"))]
 compile_error!("Compiling for non-32bit is not allowed.");
@@ -24,13 +26,14 @@ thread_local! {
 
 static INSTANCE: OnceLock<Instance> = OnceLock::new();
 
-static SERVER_TICK_SOURCE_LOCATION: SpanLocation = todo!();
+static SERVER_TICK_SOURCE_LOCATION: OnceLock<SpanLocation> = OnceLock::new();
 
-static SEND_MAPS_SOURCE_LOCATION: SpanLocation = todo!();
+static SEND_MAPS_SOURCE_LOCATION: OnceLock<SpanLocation> = OnceLock::new();
 
 struct Instance {
     pub byond: ByondReflectionData,
     tracy_client: Client,
+    source_locations: [Option<SpanLocation>; MAX_PROCS],
 }
 
 impl Instance {
@@ -99,19 +102,26 @@ fn setup() -> Result<Instance, *const c_char> {
         None => return Err("byond version unsupported".as_ptr() as *const c_char),
     };
 
-    Ok(Instance {
-        byond: match ByondReflectionData::create_and_initialize_hooks(
-            offsets,
-            byondcore_base_address,
-            exec_proc_hook,
-            server_tick_hook,
-            send_maps_hook,
-        ) {
-            Ok(data) => data,
-            Err(error) => return Err(error.as_ptr() as *const c_char),
-        },
+    let byond = match ByondReflectionData::create_and_initialize_hooks(
+        offsets,
+        byondcore_base_address,
+        exec_proc_hook,
+        server_tick_hook,
+        send_maps_hook,
+    ) {
+        Ok(data) => data,
+        Err(error) => return Err(error.as_ptr() as *const c_char),
+    };
+
+    let instance = Instance {
+        byond,
         tracy_client: Client::start(),
-    })
+        source_locations: [const { None }; MAX_PROCS],
+    };
+
+    byond.build_source_locations(&mut instance.source_locations);
+
+    Ok(instance)
 }
 
 fn get_byond_build_and_byondcore_handle() -> Result<(BuildNumber, usize), String> {
@@ -194,12 +204,12 @@ fn exec_proc_hook_core(proc: *const Proc) -> DreamObject {
         .expect("(exec_proc_hook) Hook installed but OnceLock empty!");
     let orig_exec_proc = instance_ref.byond.orig_exec_proc;
     let proc_ref: &Proc = unsafe { &*proc };
-    if proc_ref.procdef < 0x14000 {
+    if proc_ref.procdef < MAX_PROCS {
         let srcloc = todo!("get source loc");
         let zone = instance_ref.tracy_client().span(srcloc, 0);
 
         // procs with pre-existing contexts are resuming from sleep
-        if proc_ref.context != null() {
+        if !proc_ref.context.is_null() {
             zone.emit_color(0xAF4444);
         }
 
@@ -234,7 +244,13 @@ fn server_tick_hook_core() -> i32 {
 
     tracy_client.frame_mark();
 
-    let zone = tracy_client.span(&SERVER_TICK_SOURCE_LOCATION, 0);
+    let zone = tracy_client.span(
+        SERVER_TICK_SOURCE_LOCATION.get_or_init(|| {
+            // TODO: Colour
+            make_span_location("ServerTick", null(), "Unknown".as_bytes().as_ptr(), 1)
+        }),
+        0,
+    );
 
     let interval = unsafe { orig_server_tick() };
 
@@ -249,9 +265,13 @@ unsafe extern "C" fn send_maps_hook() {
         .expect("(exec_proc_hook) Hook installed but OnceLock empty!");
     let orig_send_maps = instance_ref.byond.orig_send_maps;
 
-    let zone = instance_ref
-        .tracy_client()
-        .span(&SEND_MAPS_SOURCE_LOCATION, 0);
+    let zone = instance_ref.tracy_client().span(
+        SEND_MAPS_SOURCE_LOCATION.get_or_init(|| {
+            // TODO: Colour
+            make_span_location("SendMaps", null(), "Unknown".as_bytes().as_ptr(), 2)
+        }),
+        0,
+    );
 
     unsafe { orig_send_maps() };
 
