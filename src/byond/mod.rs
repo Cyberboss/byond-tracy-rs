@@ -33,7 +33,7 @@ union ObjectPart2 {
 }
 
 #[repr(C)]
-struct DreamObject {
+pub(crate) struct DreamObject {
     part_1: ObjectPart1,
     part_2: ObjectPart2,
 }
@@ -94,8 +94,8 @@ struct Misc {
 struct ExecutionContext;
 
 #[repr(C)]
-struct Proc {
-    definition: usize,
+pub(crate) struct Proc {
+    pub procdef: usize,
     flags: u8,
     supers: u8,
     unused: u16,
@@ -136,11 +136,11 @@ pub(crate) struct ByondReflectionData {
     procdefs_len: *const usize,
     procdef_desc: ProcDefsDescriptor,
     exec_proc_address: usize,
-    orig_exec_proc: ExecProcFunction,
+    pub orig_exec_proc: ExecProcFunction,
     server_tick_address: usize,
-    orig_server_tick: ServerTickFunction,
+    pub orig_server_tick: ServerTickFunction,
     send_maps_address: usize,
-    orig_send_maps: SendMapsFunction,
+    pub orig_send_maps: SendMapsFunction,
     // TODO: _Alignas(4096)
     trampoline: Trampoline,
 }

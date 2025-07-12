@@ -1,7 +1,7 @@
 #![feature(once_cell_try)]
 mod byond;
 
-use crate::byond::{BuildNumber, ByondReflectionData, offsets::OFFSETS};
+use crate::byond::{BuildNumber, ByondReflectionData, DreamObject, Proc, offsets::OFFSETS};
 #[cfg(not(target_os = "windows"))]
 use libloading::os::unix::{Library, RTLD_NOW};
 #[cfg(target_os = "windows")]
@@ -166,14 +166,24 @@ fn get_byondcore_handle() -> Result<Library, String> {
     }
 }
 
-// TODO: FIX LINUX REGPARM(3)
+#[cfg(target_os = "windows")]
 unsafe extern "C" fn exec_proc_hook(proc: *const Proc) -> DreamObject {
+    exec_proc_hook_core(proc)
+}
+
+#[cfg(not(target_os = "windows"))]
+unsafe extern "regparm(3)" fn exec_proc_hook(proc: *const Proc) -> DreamObject {
+    exec_proc_hook_core(proc)
+}
+
+#[inline(always)]
+fn exec_proc_hook_core(proc: *const Proc) -> DreamObject {
     let orig_exec_proc = INSTANCE
         .get()
         .expect("(exec_proc_hook) Hook installed but OnceLock empty!")
         .byond
         .orig_exec_proc;
-    if (unsafe { &*proc }).definition < 0x14000 {
+    if (unsafe { &*proc }).procdef < 0x14000 {
         todo!()
     }
 
