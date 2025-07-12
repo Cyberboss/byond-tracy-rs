@@ -291,7 +291,7 @@ unsafe extern "C" fn exec_proc_hook(proc: *const Proc) -> DreamObject {
         .expect("(exec_proc_hook) Hook installed but OnceLock empty!")
         .byond
         .orig_exec_proc;
-    if (*proc).definition < 0x14000 {
+    if (unsafe { &*proc }).definition < 0x14000 {
         todo!()
     }
 
