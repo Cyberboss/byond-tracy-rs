@@ -3,7 +3,7 @@ mod byond;
 
 use crate::byond::{BuildNumber, ByondReflectionData, offsets::OFFSETS};
 #[cfg(not(target_os = "windows"))]
-use libloading::os::unix::Library;
+use libloading::os::unix::{Library, RTLD_NOW};
 #[cfg(target_os = "windows")]
 use libloading::os::windows::Library;
 use std::{
@@ -144,7 +144,7 @@ fn get_byondcore_handle() -> Result<Library, String> {
     // extensions. Some of these constants are only relevant to `dlsym` or `dlmopen` calls.
     const RTLD_NOLOAD: c_int = 0x00004;
     let handle_acquisition_result =
-        unsafe { Library::open(Some(byond_dll_name), (RTLD_NOW | RTLD_NOLOAD)) };
+        unsafe { Library::open(Some(byond_dll_name), RTLD_NOW | RTLD_NOLOAD) };
 
     match handle_acquisition_result {
         Ok(handle) => Ok(handle.into()),
