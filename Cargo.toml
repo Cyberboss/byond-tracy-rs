@@ -2,6 +2,18 @@
 name = "byond-tracy-rs"
 version = "0.1.0"
 edition = "2024"
+authors = ["Jordan Dominion"]
+repository = "https://github.com/tgstation/rust-g"
+license = "MIT"
+description = "Tracy support for Build Your Own Net Dream games"
+
+[lib]
+crate-type = ["cdylib"]
+
+[profile.release]
+opt-level = 3
+codegen-units = 1
+lto = true
 
 [dependencies]
 tracy-client = "0.18.2"
