@@ -124,19 +124,6 @@ type ServerTickFunction = unsafe extern "cdecl" fn() -> i32;
 
 type SendMapsFunction = unsafe extern "cdecl" fn();
 
-struct SizedArray<T> {
-    items: *const T,
-    items_len: *const usize,
-}
-
-impl<T> Deref for SizedArray<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        todo!()
-    }
-}
-
 struct ProcdefPointer(usize);
 
 struct ByondReflectionData {
@@ -163,6 +150,8 @@ impl ByondReflectionData {
             offsets.prologue >> 8,
             offsets.prologue >> 16,
         ];
+
+        // SAFETY: Provided offsets should have been verified to be the offsets of the BYOND internals we're looking for
         unsafe {
             Self {
                 strings_base_address: transmute(byondcore_base_address + offsets.strings),

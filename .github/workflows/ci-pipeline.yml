@@ -44,6 +44,11 @@ jobs:
     name: Build and Test (Linux)
     runs-on: ubuntu-latest
     steps:
+      - name: Install Native Dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y g++-multilib
+
       - name: Checkout
         uses: actions/checkout@v4
 
