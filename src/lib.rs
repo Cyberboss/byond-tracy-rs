@@ -1,5 +1,4 @@
 #![feature(once_cell_try)]
-#![feature(fn_align)]
 mod byond;
 
 use std::{
@@ -34,27 +33,6 @@ static INSTANCE: OnceLock<Instance> = OnceLock::new();
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn init(_argc: c_int, _argv: *const *const c_char) -> *const c_char {
     init_core()
-}
-
-fn byond_return(value: Option<String>) -> *const c_char {
-    match value {
-        None => &EMPTY_STRING,
-        Some(result) if result.is_empty() => &EMPTY_STRING,
-        Some(result) => RETURN_STRING.with(|cell| {
-            // Panicking over an FFI boundary is bad form, so if a NUL ends up
-            // in the result, just truncate.
-            let cstring = match CString::new(result) {
-                Ok(s) => s,
-                Err(e) => {
-                    let (pos, mut vec) = (e.nul_position(), e.into_vec());
-                    vec.truncate(pos);
-                    CString::new(vec).unwrap_or_default()
-                }
-            };
-            cell.replace(cstring);
-            cell.borrow().as_ptr()
-        }),
-    }
 }
 
 fn init_core() -> *const c_char {
@@ -119,7 +97,6 @@ fn setup() -> Result<Instance, *const c_char> {
 #[cfg(target_os = "windows")]
 fn get_byond_build_and_byondcore_handle() -> Result<(BuildNumber, usize), String> {
     #[cfg(target_os = "windows")]
-    use windows::Win32::Foundation::HMODULE;
     use windows::{
         Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress},
         core::PCSTR,
