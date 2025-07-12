@@ -101,7 +101,7 @@ pub(crate) struct Proc {
     unused: u16,
     usr: DreamObject,
     src: DreamObject,
-    context: *const ExecutionContext,
+    pub context: *const ExecutionContext,
     sequence: u32,
     callback: fn(DreamObject, u32) -> (),
     callback_arg: u32,

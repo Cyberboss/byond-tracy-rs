@@ -9,17 +9,13 @@ use libloading::os::windows::Library;
 use std::{
     cell::RefCell,
     ffi::{CString, c_char, c_int},
+    ptr::null,
     sync::OnceLock,
 };
-use tracy_client::Client;
+use tracy_client::{Client, SpanLocation};
 
 #[cfg(not(target_pointer_width = "32"))]
 compile_error!("Compiling for non-32bit is not allowed.");
-
-struct Instance {
-    pub byond: ByondReflectionData,
-    _tracy_client: Client,
-}
 
 static EMPTY_STRING: c_char = 0;
 thread_local! {
@@ -27,6 +23,21 @@ thread_local! {
 }
 
 static INSTANCE: OnceLock<Instance> = OnceLock::new();
+
+static SERVER_TICK_SOURCE_LOCATION: SpanLocation = todo!();
+
+static SEND_MAPS_SOURCE_LOCATION: SpanLocation = todo!();
+
+struct Instance {
+    pub byond: ByondReflectionData,
+    tracy_client: Client,
+}
+
+impl Instance {
+    fn tracy_client(&self) -> Client {
+        self.tracy_client.clone()
+    }
+}
 
 /// SAFETY: This function must only be called via the call()() or call_ext()() procs using the legacy API of a game running using Build Your Own Net Dream (BYOND, https://www.byond.com/).
 /// It relies on reverse engineered internals of the game runtime
@@ -99,7 +110,7 @@ fn setup() -> Result<Instance, *const c_char> {
             Ok(data) => data,
             Err(error) => return Err(error.as_ptr() as *const c_char),
         },
-        _tracy_client: Client::start(),
+        tracy_client: Client::start(),
     })
 }
 
@@ -178,16 +189,28 @@ unsafe extern "regparm(3)" fn exec_proc_hook(proc: *const Proc) -> DreamObject {
 
 #[inline(always)]
 fn exec_proc_hook_core(proc: *const Proc) -> DreamObject {
-    let orig_exec_proc = INSTANCE
+    let instance_ref = INSTANCE
         .get()
-        .expect("(exec_proc_hook) Hook installed but OnceLock empty!")
-        .byond
-        .orig_exec_proc;
-    if (unsafe { &*proc }).procdef < 0x14000 {
-        todo!()
-    }
+        .expect("(exec_proc_hook) Hook installed but OnceLock empty!");
+    let orig_exec_proc = instance_ref.byond.orig_exec_proc;
+    let proc_ref: &Proc = unsafe { &*proc };
+    if proc_ref.procdef < 0x14000 {
+        let srcloc = todo!("get source loc");
+        let zone = instance_ref.tracy_client().span(srcloc, 0);
 
-    unsafe { orig_exec_proc(proc) }
+        // procs with pre-existing contexts are resuming from sleep
+        if proc_ref.context != null() {
+            zone.emit_color(0xAF4444);
+        }
+
+        let return_value = unsafe { orig_exec_proc(proc) };
+
+        drop(zone);
+
+        return_value
+    } else {
+        unsafe { orig_exec_proc(proc) }
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -202,9 +225,35 @@ unsafe extern "C" fn server_tick_hook() -> i32 {
 
 #[inline(always)]
 fn server_tick_hook_core() -> i32 {
-    todo!()
+    let instance_ref = INSTANCE
+        .get()
+        .expect("(exec_proc_hook) Hook installed but OnceLock empty!");
+    let orig_server_tick = instance_ref.byond.orig_server_tick;
+
+    let tracy_client = instance_ref.tracy_client();
+
+    tracy_client.frame_mark();
+
+    let zone = tracy_client.span(&SERVER_TICK_SOURCE_LOCATION, 0);
+
+    let interval = unsafe { orig_server_tick() };
+
+    drop(zone);
+
+    interval
 }
 
 unsafe extern "C" fn send_maps_hook() {
-    todo!()
+    let instance_ref = INSTANCE
+        .get()
+        .expect("(exec_proc_hook) Hook installed but OnceLock empty!");
+    let orig_send_maps = instance_ref.byond.orig_send_maps;
+
+    let zone = instance_ref
+        .tracy_client()
+        .span(&SEND_MAPS_SOURCE_LOCATION, 0);
+
+    unsafe { orig_send_maps() };
+
+    drop(zone);
 }
